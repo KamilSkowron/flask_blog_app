@@ -1,0 +1,13 @@
+In HTML JINJA:
+
+
+# FILTERS
+{{ variable|lower}}
+
+|safe
+|capitalize
+|lower
+|upper
+|title
+|trim
+|striptags
