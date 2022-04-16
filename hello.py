@@ -53,7 +53,7 @@ class NamerForm(FlaskForm):
 	submit = SubmitField("Submit")
 
 # Delete Database Record
-@app.route('/delete/<int:id>')
+@app.route('/delete/<int:id>', methods=['GET', 'POST'])
 def delete(id):
 	form = UserForm()
 	name = None
@@ -101,7 +101,8 @@ def update(id):
 	else:
 		return render_template("update.html",
 		form=form,
-		name_to_update=name_to_update)
+		name_to_update=name_to_update,
+		id=id)
 
 
 @app.route('/user/add', methods=['GET', 'POST'])
