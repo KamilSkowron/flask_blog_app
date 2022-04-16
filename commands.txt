@@ -34,3 +34,14 @@ in git commandline:
 	flask db init
 	flask db migrate -m 'Initial Migration'
 	flask db upgrade
+
+
+-- Password hash - checkout how it works
+
+flask shell
+from hello import Users
+u = Users()
+u.password = 'cat'
+u.password - Password is not a readable attribute!
+u.password_hash - Hash....
+u.verify_password('cat') - True
