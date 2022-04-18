@@ -75,16 +75,46 @@
 
 #####################################################################################
 
-# Zadanko 14
+# # Zadanko 14
 
-strs = ["flower", "flow", "flight"]
-prefix = ""
+# strs = ["flower", "flow", "flight"]
+# prefix = ""
 
-l = zip(*strs)      # [('f', 'f', 'f'), ('l', 'l', 'l'), ('o', 'o', 'i'), ('w', 'w', 'g')]
+# l = zip(*strs)      # [('f', 'f', 'f'), ('l', 'l', 'l'), ('o', 'o', 'i'), ('w', 'w', 'g')]
 
-for i in l:
-    if len(set(i)) == 1:
-        prefix += i[0]
-    else:
-        break
-print(prefix)
+# for i in l:
+#     if len(set(i)) == 1:
+#         prefix += i[0]
+#     else:
+#         break
+# print(prefix)
+
+
+#####################################################################################
+
+# # Zad 23?
+# list1 = [1,2,4,5,7,9,22,23]
+# list2 = [1,3,4,5,6,10,11,24]
+
+# l1 = iter(list1)
+# l2 = iter(list2)
+
+# x1 = next(l1)
+# x2 = next(l2)
+
+# lista3 = []
+# for i in range(len(list1) + len(list2)): 
+#     if x1 < x2:
+#         lista3.append(x1)
+#         x1 = next(l1,float("inf"))
+#     else:
+#         lista3.append(x2)
+#         x2 = next(l2,float("inf"))
+#     print(lista3)
+
+
+#####################################################################################
+
+nums = [0,0,1,1,1,2,2,3,3,4]
+
+print(len(set(nums)), list(set(nums)))

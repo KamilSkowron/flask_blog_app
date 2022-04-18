@@ -2,8 +2,9 @@ from flask import Flask, render_template, flash, request
 from flask_wtf import FlaskForm
 from wtforms import StringField, SubmitField, PasswordField, BooleanField, ValidationError
 from wtforms.validators import DataRequired, EqualTo, Length
+from wtforms.widgets import TextArea
 
-from datetime import datetime
+from datetime import datetime, date
 
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
@@ -26,6 +27,11 @@ app.config['SECRET_KEY'] = "32k3o23ko2"
 db = SQLAlchemy(app)
 
 migrate = Migrate(app, db)
+
+
+
+
+
 
 class Users(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
@@ -55,7 +61,23 @@ class Users(db.Model):
 	def __rep__(self):
 		return '<Name %r>' % self.name
 
+# Create a Blog Post model
+class Posts(db.Model):
+	id = db.Column(db.Integer, primary_key=True)
+	title = db.Column(db.String(255))
+	content = db.Column(db.Text)
+	author = db.Column(db.String(255))
+	date_posted = db.Column(db.DateTime, default=datetime.utcnow)
+	slug = db.column(db.String(255))
 
+
+# Create Form Posts
+class PostForm(FlaskForm):
+	title = StringField("Title", validators=[DataRequired()])
+	content = StringField("Content", validators=[DataRequired()], widget=TextArea())
+	author = StringField("Author", validators=[DataRequired()])
+	slug = StringField("Slugfield", validators=[DataRequired()])
+	submit = SubmitField("Submit", validators=[DataRequired()])
 
 # Create Form Class
 class UserForm(FlaskForm):
@@ -71,6 +93,59 @@ class UserForm(FlaskForm):
 class NamerForm(FlaskForm):
 	name = StringField("What's Your Name", validators=[DataRequired()])
 	submit = SubmitField("Submit")
+
+
+# Create Password Form Class
+class PasswordForm(FlaskForm):
+	email = StringField("What's Your email?", validators=[DataRequired()])
+	password_hash = PasswordField("What's Your password?", validators=[DataRequired()])
+	submit = SubmitField("Submit")
+
+
+# Json Thing
+@app.route('/date')
+def get_current_date():
+	favourite_pizza = {
+		"John":"Pepperoni",
+		"Mary":"Cheese",
+		"Tim":"Mushrooms"
+	}
+	return favourite_pizza
+	#return {"Date": date.today()}
+
+
+
+# Add Post Page
+@app.route('/add-post', methods=['GET', 'POST'])
+def add_post():
+	form = PostForm()
+
+	if form.validate_on_submit():
+		post = Posts(title=form.title.data,
+					 content=form.content.data,
+					 author=form.author.data,
+					 slug=form.slug.data)
+		# Clear the Form
+		form.title.data = ""
+		form.content.data = ""
+		form.author.data = ""
+		form.slug.data = ""
+
+		# Add post data to database
+		db.session.add(post)
+		db.session.commit()
+
+		flash("Blog Post Submitted Successfully!")
+
+	return render_template("add_post.html",form=form)
+
+
+@app.route('/posts')
+def posts():
+	# Grab all the post from the database
+	posts = Posts.query.order_by(Posts.date_posted)
+	return render_template("posts.html", posts=posts)
+
 
 # Delete Database Record
 @app.route('/delete/<int:id>', methods=['GET', 'POST'])
@@ -191,6 +266,40 @@ def name():
 	return render_template("name.html",
 							name=name,
 							form=form)
+
+
+@app.route('/test_pw', methods=['GET', 'POST'])
+def test_pw():
+	email = None
+	password = None
+	pw_to_check = None
+	passed = None
+
+	form =PasswordForm()
+	
+	#Validate From
+	if form.validate_on_submit():
+		email = form.email.data
+		password = form.password_hash.data
+		# Clear the form
+		form.email.data = ''
+		form.password_hash.data = ''
+		
+		# Lookup User by email
+		pw_to_check = Users.query.filter_by(email=email).first()
+
+		# Check Hashed Password
+		passed = check_password_hash(pw_to_check.password_hash, password)	#(hashed password, password from the form) #True/False
+
+
+	return render_template("test_pw.html",
+							email=email,
+							password=password,
+							pw_to_check=pw_to_check,
+							passed=passed,
+							form=form)
+
+
 
 
 @app.route('/about_me')
