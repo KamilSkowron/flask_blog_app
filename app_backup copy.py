@@ -1,5 +1,6 @@
-from flask import Flask, render_template, flash, request
+from flask import Flask, redirect, render_template, flash, request, url_for
 from flask_wtf import FlaskForm
+from flask_login import UserMixin, login_user, LoginManager, login_required, logout_user, current_user
 from wtforms import StringField, SubmitField, PasswordField, BooleanField, ValidationError
 from wtforms.validators import DataRequired, EqualTo, Length
 from wtforms.widgets import TextArea
@@ -29,12 +30,86 @@ db = SQLAlchemy(app)
 migrate = Migrate(app, db)
 
 
+# Flask_Login Stuff
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login'
+
+@login_manager.user_loader
+def load_user(user_id):
+	return Users.query.get(int(user_id))
 
 
 
+# Create Login Form
+class LoginForm(FlaskForm):
+	username = StringField("Username", validators=[DataRequired()])
+	password = PasswordField("Password", validators=[DataRequired()])
+	submit = SubmitField("Submit")
 
-class Users(db.Model):
+# Create Login Page
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+	form = LoginForm()
+	if form.validate_on_submit():
+		user = Users.query.filter_by(username=form.username.data).first()
+		if user:
+			# Check the hash
+			if check_password_hash(user.password_hash, form.password.data):
+				login_user(user)
+				flash("Login Succesfull")
+				return redirect(url_for('dashboard'))
+			else:
+				flash("Wrong Password - Try Again")
+		else:
+			flash("That user doesn't exist.")
+			
+	return render_template('login.html', form=form)
+
+# Create Logout Page
+@app.route('/logout', methods=['GET', 'POST'])
+@login_required
+def logout():
+	logout_user()
+	flash("You have been logout!")
+	return redirect(url_for('login'))
+
+
+# Create Dashboard Page
+@app.route('/dashboard', methods=['GET', 'POST'])
+@login_required
+def dashboard():
+	form = UserForm()
+	id = current_user.id
+	name_to_update = Users.query.get_or_404(id)
+	if request.method == "POST":
+		name_to_update.name =request.form['name'] # different way to handle request.form but the other one still works
+		name_to_update.email =request.form['email']
+		name_to_update.favorite_color =request.form['favorite_color']
+		name_to_update.username = request.form['username']
+		try:
+			db.session.commit()
+			flash("User Updated Succesfully!")
+			return render_template("dashboard.html",
+									form=form,
+									name_to_update=name_to_update)
+		except:
+			flash("Error! Looks like there was a problem, try again")
+			return render_template("dashboard.html",
+									form=form,
+									name_to_update=name_to_update)
+	else:
+		return render_template("dashboard.html",
+		form=form,
+		name_to_update=name_to_update,
+		id=id)
+	
+
+
+
+class Users(db.Model, UserMixin):
 	id = db.Column(db.Integer, primary_key=True)
+	username = db.Column(db.String(100), nullable=False, unique=True)
 	name = db.Column(db.String(100), nullable=False)
 	email = db.Column(db.String(100), nullable=False, unique=True)
 	favorite_color = db.Column(db.String(100))
@@ -68,7 +143,7 @@ class Posts(db.Model):
 	content = db.Column(db.Text)
 	author = db.Column(db.String(255))
 	date_posted = db.Column(db.DateTime, default=datetime.utcnow)
-	slug = db.column(db.String(255))
+	slug = db.Column(db.String(255))
 
 
 # Create Form Posts
@@ -82,6 +157,7 @@ class PostForm(FlaskForm):
 # Create Form Class
 class UserForm(FlaskForm):
 	name = StringField("Name", validators=[DataRequired()])
+	username = StringField("Username", validators=[DataRequired()])
 	email = StringField("Email", validators=[DataRequired()])
 	favorite_color = StringField("Favorite Color")
 	password_hash = PasswordField("Password", validators=[DataRequired(), EqualTo('password_hash2', message='Passwords Must Match!')])
@@ -114,9 +190,55 @@ def get_current_date():
 	#return {"Date": date.today()}
 
 
+# Single post
+@app.route('/posts/<int:id>')
+def post(id):
+	post = Posts.query.get_or_404(id)
+	return render_template('post.html', post=post)
+
+
+# Delete post
+@app.route('/posts/delete/<int:id>')
+def delete_post(id):
+	post = Posts.query.get_or_404(id)
+
+	try:
+		db.session.delete(post)
+		db.session.commit()
+		flash("Post was deleted.")
+		return redirect(url_for('posts'))
+	except:
+		flash("Something gone wrong")
+		return redirect(url_for('posts'))
+	
+
+# Edit post
+@app.route('/posts/edit/<int:id>', methods=['GET', 'POST'])
+@login_required
+def edit_post(id):
+	post = Posts.query.get_or_404(id)
+	form = PostForm()
+	if form.validate_on_submit():
+		post.title = form.title.data
+		post.author = form.author.data
+		post.slug = form.slug.data
+		post.content = form.content.data
+		
+		# Update Database
+		db.session.add(post)
+		db.session.commit()
+		flash("Post has been updated.")
+		return redirect(url_for('post', id=post.id))
+	
+	form.title.data = post.title
+	form.author.data = post.author
+	form.slug.data = post.slug
+	form.content.data = post.content
+	return render_template('edit_post.html', form=form)
 
 # Add Post Page
 @app.route('/add-post', methods=['GET', 'POST'])
+#@login_required
 def add_post():
 	form = PostForm()
 
@@ -182,6 +304,7 @@ def update(id):
 		name_to_update.name =request.form['name'] # different way to handle request.form but the other one still works
 		name_to_update.email =request.form['email']
 		name_to_update.favorite_color =request.form['favorite_color']
+		name_to_update.username = request.form['username']
 		try:
 			db.session.commit()
 			flash("User Updated Succesfully!")
@@ -211,7 +334,8 @@ def add_user():
 			# Hash the password
 			hashed_pw = generate_password_hash(form.password_hash.data, "sha256")
 
-			user = Users(name=form.name.data, 
+			user = Users(name=form.name.data,
+						 username=form.username.data, 
 						 email=form.email.data, 
 						 favorite_color=form.favorite_color.data, 
 						 password_hash=hashed_pw)
@@ -220,6 +344,7 @@ def add_user():
 			db.session.commit()
 		name = form.name.data
 		form.name.data= ''
+		form.username.data= ''
 		form.email.data= ''
 		form.favorite_color.data = ''
 		form.password_hash.data = ''
