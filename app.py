@@ -1,3 +1,4 @@
+
 from flask import Flask, redirect, render_template, flash, request, url_for
 from flask_login import UserMixin, login_user, LoginManager, login_required, logout_user, current_user
 
@@ -7,7 +8,7 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from werkzeug.security import generate_password_hash, check_password_hash
 
-from forms import LoginForm, PostForm, UserForm, PasswordForm, NamerForm
+from forms import LoginForm, PostForm, UserForm, PasswordForm, NamerForm, SearchFrom
 
 app = Flask(__name__)
 
@@ -44,6 +45,30 @@ def load_user(user_id):
 def index():
 	return render_template('index.html')
 
+# Pass Stuff to Navbar
+@app.context_processor
+def base():
+	form = SearchFrom()
+	return dict(form=form)
+
+# Create Search Function
+@app.route('/search', methods=["POST"])
+def search():
+	form = SearchFrom()
+	posts = Posts.query
+	if form.validate_on_submit():
+		# Get data from submitted form
+		post.searched = form.searched.data
+		#Query the database
+		posts = posts.filter(Posts.content.like('%' + post.searched + '%'))
+		posts = posts.order_by(Posts.title).all()
+		return render_template("search.html",
+								form=form,
+								searched=post.searched,
+								posts=posts)
+								
+	posts = Posts.query.order_by(Posts.date_posted)
+	return render_template("posts.html", posts=posts)
 #-------------------# Posts #-------------------#
 
 # Add Post Page
@@ -53,14 +78,15 @@ def add_post():
 	form = PostForm()
 
 	if form.validate_on_submit():
+		poster = current_user.id
 		post = Posts(title=form.title.data,
 					 content=form.content.data,
-					 author=form.author.data,
+					 poster_id=poster,
 					 slug=form.slug.data)
 		# Clear the Form
 		form.title.data = ""
 		form.content.data = ""
-		form.author.data = ""
+		#form.author.data = ""
 		form.slug.data = ""
 
 		# Add post data to database
@@ -79,7 +105,7 @@ def edit_post(id):
 	form = PostForm()
 	if form.validate_on_submit():
 		post.title = form.title.data
-		post.author = form.author.data
+		#post.author = form.author.data
 		post.slug = form.slug.data
 		post.content = form.content.data
 		
@@ -89,27 +115,38 @@ def edit_post(id):
 		flash("Post has been updated.")
 		return redirect(url_for('post', id=post.id))
 	
-	form.title.data = post.title
-	form.author.data = post.author
-	form.slug.data = post.slug
-	form.content.data = post.content
-	return render_template('edit_post.html', form=form)
+
+	if current_user.id == post.poster_id:
+		form.title.data = post.title
+		#form.author.data = post.author
+		form.slug.data = post.slug
+		form.content.data = post.content
+		return render_template('edit_post.html', form=form)
+
+	else:
+		flash("You can't edit this post!")
+		return redirect(url_for("posts"))
 
 # Delete post
 @app.route('/posts/delete/<int:id>')
+@login_required
 def delete_post(id):
 	post = Posts.query.get_or_404(id)
-
-	try:
-		db.session.delete(post)
-		db.session.commit()
-		flash("Post was deleted.")
+	id = current_user.id
+	if id == post.poster.id:
+		try:
+			db.session.delete(post)
+			db.session.commit()
+			flash("Post was deleted.")
+			return redirect(url_for('posts'))
+		except:
+			flash("Something gone wrong")
+			return redirect(url_for('posts'))
+	else:
+		flash("You can't delete this post!")
 		return redirect(url_for('posts'))
-	except:
-		flash("Something gone wrong")
-		return redirect(url_for('posts'))
-	
 # Single post
+
 @app.route('/posts/<int:id>')
 def post(id):
 	post = Posts.query.get_or_404(id)
@@ -187,29 +224,34 @@ def update(id):
 
 # Delete User
 @app.route('/delete/<int:id>', methods=['GET', 'POST'])
+@login_required
 def delete(id):
 	form = UserForm()
 	name = None
 
 	user_to_delete = Users.query.get_or_404(id)
 	
-	try:
-		db.session.delete(user_to_delete)
-		db.session.commit()
-		flash("User deleted successfully!")
+	if (id == current_user.id):
+		try:
+			db.session.delete(user_to_delete)
+			db.session.commit()
+			flash("User deleted successfully!")
 
-		our_users = Users.query.order_by(Users.date_added)
-		return render_template("add_user.html",
-							form=form,
-							name=name,
-							our_users=our_users)
+			our_users = Users.query.order_by(Users.date_added)
+			return render_template("add_user.html",
+								form=form,
+								name=name,
+								our_users=our_users)
 
-	except:
-		flash("Something gone wrong...")
-		return render_template("add_user.html",
-					form=form,
-					name=name,
-					our_users=our_users)
+		except:
+			flash("Something gone wrong...")
+			return render_template("add_user.html",
+						form=form,
+						name=name,
+						our_users=our_users)
+	else:
+		flash("You can't delete this account!")
+		return redirect(url_for('dashboard'))
 
 
 #-------------------# Login #-------------------#
@@ -367,10 +409,10 @@ class Users(db.Model, UserMixin):
 	email = db.Column(db.String(100), nullable=False, unique=True)
 	favorite_color = db.Column(db.String(100))
 	date_added = db.Column(db.DateTime, default=datetime.utcnow)
-	
 	#Do some password stuff
 	password_hash = db.Column(db.String(128))
-
+	# User Can Have Many Posts
+	posts = db.relationship('Posts', backref='poster')		# Uppercase because refering to the class  || backref it is a any string use to refer ex. = poster.name poster.email etc.
 
 	#It doesn't allow see written password (It's forbitten)
 	@property
@@ -384,8 +426,6 @@ class Users(db.Model, UserMixin):
 	def verify_password(self,password):
 		return check_password_hash(self.password_hash, password)
 
-
-
 	def __rep__(self):
 		return '<Name %r>' % self.name
 
@@ -394,9 +434,11 @@ class Posts(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
 	title = db.Column(db.String(255))
 	content = db.Column(db.Text)
-	author = db.Column(db.String(255))
+	#author = db.Column(db.String(255))
 	date_posted = db.Column(db.DateTime, default=datetime.utcnow)
 	slug = db.Column(db.String(255))
+	# Foreign Key to Link User (refer to primary key of User)
+	poster_id = db.Column(db.Integer, db.ForeignKey("users.id"))	# Lowercase because refering to the database
 
 
 
