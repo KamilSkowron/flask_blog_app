@@ -21,9 +21,12 @@
     <br>
     {{ post.date_posted }}<br>
     <br>
-    {{ post.content }}<br><br>
+    {{ post.content|safe }}<br
+    ><br>
+    {% if post.poster.about %}
+    {{ post.poster.about_author }}
 
-
+    {% endif %}
     <br>
     <a href=" {{ url_for('post', id=post.id) }}"" class=" btn btn-outline-secondary">View Post</a>
 

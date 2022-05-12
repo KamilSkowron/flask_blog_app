@@ -1,4 +1,5 @@
 
+from PIL import Image
 from flask import Flask, redirect, render_template, flash, request, url_for
 from flask_login import UserMixin, login_user, LoginManager, login_required, logout_user, current_user
 
@@ -7,6 +8,9 @@ from datetime import datetime, date
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.utils import secure_filename
+import uuid as uuid
+import os
 
 from forms import LoginForm, PostForm, UserForm, PasswordForm, NamerForm, SearchFrom
 
@@ -22,6 +26,12 @@ app.config['SQLALCHEMY_DATABASE_URI'] = "mysql+pymysql://root:password123@localh
 
 # Secret Key
 app.config['SECRET_KEY'] = "32k3o23ko2"
+
+# Upload folder for profile pics
+UPLOAD_FOLDER = 'static/images/profile_pics'
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+
+
 
 db = SQLAlchemy(app)
 
@@ -204,6 +214,7 @@ def update(id):
 		name_to_update.name =request.form['name'] # different way to handle request.form but the other one still works
 		name_to_update.email =request.form['email']
 		name_to_update.favorite_color =request.form['favorite_color']
+		name_to_update.about_author =request.form['about_author']
 		name_to_update.username = request.form['username']
 		try:
 			db.session.commit()
@@ -295,14 +306,37 @@ def dashboard():
 		name_to_update.email =request.form['email']
 		name_to_update.favorite_color =request.form['favorite_color']
 		name_to_update.username = request.form['username']
-		try:
+		name_to_update.about_author = request.form['about_author']
+		
+		# Check for profile pic
+		if request.files['profile_pic']:
+			name_to_update.profile_pic = request.files['profile_pic']
+			i = Image.open(name_to_update.profile_pic)
+			i.thumbnail((200,200))
+
+			# Grab Image Name
+			pic_filename = secure_filename(name_to_update.profile_pic.filename)
+			# Set UUID (new random name of the file)
+			pic_name = str(uuid.uuid1()) + "_" + pic_filename
+			#Save That Image
+			i.save(os.path.join(app.config['UPLOAD_FOLDER'], pic_name))
+			# Change it to a string to save to db
+			name_to_update.profile_pic = pic_name
+
+			try:
+				db.session.commit()
+				flash("User Updated Succesfully!")
+				return render_template("dashboard.html",
+										form=form,
+										name_to_update=name_to_update)
+			except:
+				flash("Error! Looks like there was a problem, try again")
+				return render_template("dashboard.html",
+										form=form,
+										name_to_update=name_to_update)
+		else:
 			db.session.commit()
 			flash("User Updated Succesfully!")
-			return render_template("dashboard.html",
-									form=form,
-									name_to_update=name_to_update)
-		except:
-			flash("Error! Looks like there was a problem, try again")
 			return render_template("dashboard.html",
 									form=form,
 									name_to_update=name_to_update)
@@ -408,7 +442,9 @@ class Users(db.Model, UserMixin):
 	name = db.Column(db.String(100), nullable=False)
 	email = db.Column(db.String(100), nullable=False, unique=True)
 	favorite_color = db.Column(db.String(100))
+	about_author = db.Column(db.Text(500), nullable=True)
 	date_added = db.Column(db.DateTime, default=datetime.utcnow)
+	profile_pic = db.Column(db.String(500), nullable=True)
 	#Do some password stuff
 	password_hash = db.Column(db.String(128))
 	# User Can Have Many Posts

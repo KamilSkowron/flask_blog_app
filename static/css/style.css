@@ -11,3 +11,24 @@ body {
 	font-size: 32px;
 	color:darkblue;
 }
+
+.default-pic,
+.profile-pic,
+.profile-pic-post,
+.default-pic-post{
+	background-color: rgb(240, 240, 240);
+	border-style: solid;
+	width: 200px;
+	height: 200px;
+	border-radius: 10px;
+	object-fit: cover;
+}
+
+.default-pic,
+.default-pic-post{
+	padding: 15px;
+}
+.default-pic-post,
+.profile-pic-post{
+	
+}
